@@ -8,6 +8,7 @@ import { FirebaseSmsSender } from '@/components/firebase-sms-sender';
 import { Screen } from '@/components/screen';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors, Radius, Spacing } from '@/constants/theme';
+import { sendCodeDirect } from '@/lib/firebase-auth';
 import { FIREBASE_NOT_CONFIGURED, isFirebaseConfigured } from '@/lib/firebase-config';
 import { toE164 } from '@/lib/phone';
 
@@ -15,11 +16,12 @@ export default function PhoneScreen() {
   const [countryCode, setCountryCode] = useState('+92');
   const [number, setNumber] = useState('');
   const [sendingTo, setSendingTo] = useState<string | null>(null);
+  const [requesting, setRequesting] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const phone = toE164(countryCode, number);
 
-  function handleSend() {
+  async function handleSend() {
     if (!phone) {
       setError('Enter a valid mobile number, e.g. 300 1234567.');
       return;
@@ -29,7 +31,16 @@ export default function PhoneScreen() {
       return;
     }
     setError(null);
-    setSendingTo(phone); // opens the Firebase security-check sheet, which sends the SMS
+    setRequesting(true);
+    const result = await sendCodeDirect(phone);
+    setRequesting(false);
+    if (result.status === 'sent') {
+      router.push({ pathname: '/verify', params: { phone, verificationId: result.verificationId } });
+    } else if (result.status === 'error') {
+      setError(result.message);
+    } else {
+      setSendingTo(phone); // Firebase wants reCAPTCHA: open the security-check sheet, which sends the SMS
+    }
   }
 
   function handleSent(verificationId: string) {
@@ -96,7 +107,7 @@ export default function PhoneScreen() {
       )}
 
       <View style={styles.action}>
-        <Button title="Send OTP" onPress={handleSend} loading={sendingTo !== null} disabled={!number.trim()} />
+        <Button title="Send OTP" onPress={handleSend} loading={requesting || sendingTo !== null} disabled={!number.trim()} />
       </View>
     </Screen>
   );

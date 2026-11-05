@@ -30,6 +30,7 @@ Screen recording: [`screenshots/demo.mp4`](screenshots/demo.mp4)
 * **Sending the SMS:** Firebase only sends phone-auth SMS after a reCAPTCHA check, and reCAPTCHA needs a browser. `src/components/firebase-sms-sender.tsx` opens a sheet with a `react-native-webview`. The sheet loads the official Firebase JS SDK, using the project's `authDomain` as its base URL, and calls `signInWithPhoneNumber` with an invisible reCAPTCHA. It then passes the `verificationId` back to the app. This works inside **Expo Go**, so no custom native build is needed.
 * **Checking the code:** `src/lib/firebase-auth.ts` sends the `verificationId` and the typed code to Firebase's Identity Toolkit endpoint `accounts:signInWithPhoneNumber`, the same call the Firebase SDK makes. The right code signs the user in and creates them in Firebase. A wrong code returns `INVALID_CODE`, and the app shows **Verification failed** with *Try again*.
 * The SMS comes from Firebase's own sender, not a personal phone.
+* **Free Spark plan:** Firebase only sends real SMS on the paid Blaze plan. On the free plan, use **Authentication → Sign-in method → Phone → Phone numbers for testing**: add a number and its code, e.g. `+92 300 0000001` / `123456`. The app first asks Firebase directly with `accounts:sendVerificationCode`, which works for test numbers without reCAPTCHA. It opens the reCAPTCHA sheet only for real numbers. Also allow your country under **Authentication → Settings → SMS region policy**.
 
 ## Tech stack
 
@@ -59,8 +60,8 @@ src/
 ### 1. Firebase setup
 
 1. In <https://console.firebase.google.com>, create a project.
-2. Upgrade it to the **Blaze** plan. Firebase only sends phone-auth SMS on Blaze.
-3. Go to **Authentication → Sign-in method → Phone** and enable it.
+2. Go to **Authentication → Sign-in method → Phone** and enable it. Add a test number and code under **Phone numbers for testing** (this is free).
+3. Go to **Authentication → Settings → SMS region policy** and allow your country. Real SMS to any number also needs the **Blaze** plan.
 4. Go to **Project settings → Your apps → Web app (`</>`)**, register an app and copy its `firebaseConfig`.
 
 ### 2. Configure and start

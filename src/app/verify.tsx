@@ -9,7 +9,7 @@ import { OtpInput } from '@/components/otp-input';
 import { Screen } from '@/components/screen';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors, OTP_LENGTH, RESEND_COOLDOWN_SECONDS, Spacing } from '@/constants/theme';
-import { confirmCode, FirebaseAuthError } from '@/lib/firebase-auth';
+import { confirmCode, FirebaseAuthError, sendCodeDirect } from '@/lib/firebase-auth';
 import { maskPhone } from '@/lib/phone';
 
 export default function VerifyScreen() {
@@ -19,6 +19,7 @@ export default function VerifyScreen() {
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [secondsLeft, setSecondsLeft] = useState(RESEND_COOLDOWN_SECONDS);
@@ -57,13 +58,23 @@ export default function VerifyScreen() {
     }
   }
 
-  function handleResend() {
+  async function handleResend() {
     setError(null);
     setNotice(null);
-    setResending(true); // opens the Firebase security-check sheet
+    setResending(true);
+    const result = await sendCodeDirect(phone);
+    if (result.status === 'sent') {
+      handleResent(result.verificationId);
+    } else if (result.status === 'error') {
+      setResending(false);
+      setError(result.message);
+    } else {
+      setSheetOpen(true); // Firebase wants reCAPTCHA
+    }
   }
 
   function handleResent(newVerificationId: string) {
+    setSheetOpen(false);
     setResending(false);
     setVerificationId(newVerificationId);
     setCode('');
@@ -74,13 +85,17 @@ export default function VerifyScreen() {
   return (
     <Screen>
       <FirebaseSmsSender
-        phone={resending ? phone : null}
+        phone={sheetOpen ? phone : null}
         onSent={handleResent}
         onError={(message) => {
+          setSheetOpen(false);
           setResending(false);
           setError(message);
         }}
-        onCancel={() => setResending(false)}
+        onCancel={() => {
+          setSheetOpen(false);
+          setResending(false);
+        }}
       />
       <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back} accessibilityRole="button">
         <Ionicons name="chevron-back" size={20} color={Colors.primary} />
