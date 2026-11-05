@@ -105,14 +105,24 @@ async function twilioPost(path: string, params: Record<string, string>): Promise
 /** Asks Twilio to text a one-time code to `phone` (E.164). */
 export async function startVerification(phone: string) {
   const result = await twilioPost('Verifications', { To: phone, Channel: 'sms' });
-  console.log(`[otp] SMS code sent to ${maskPhone(phone)} (status: ${result.status})`);
+  console.log(`[otp] OTP SENT      -> ${phone} via Twilio Verify (sid ${result.sid}, status: ${result.status})`);
   return result;
 }
 
+// Numbers verified since the server started (shown in the terminal log).
+const g = globalThis as typeof globalThis & { __registered?: Set<string> };
+const registered = (g.__registered ??= new Set());
+
 /** Checks the code the user typed. `approved` means it matched. */
 export async function checkVerification(phone: string, code: string) {
+  console.log(`[otp] OTP ENTERED   -> ${phone} typed ${code.replace(/\d/g, '•')}`);
   const result = await twilioPost('VerificationCheck', { To: phone, Code: code });
-  console.log(`[otp] Code check for ${maskPhone(phone)}: ${result.status}`);
+  if (result.status === 'approved') {
+    registered.add(phone);
+    console.log(`[otp] VERIFIED ✓    -> ${phone} is registered (status: approved). Registered numbers: ${registered.size}`);
+  } else {
+    console.log(`[otp] REJECTED ✗    -> ${maskPhone(phone)} wrong code (status: ${result.status})`);
+  }
   return result;
 }
 
