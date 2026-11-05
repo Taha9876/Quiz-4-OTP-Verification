@@ -33,13 +33,13 @@ export default function ResultScreen() {
         <Text style={styles.message}>
           {success ? (
             <>
-              <Text style={styles.phone}>{phone}</Text> has been verified and registered in Firebase Authentication.
+              <Text style={styles.phone}>{phone}</Text> has been verified and registered successfully.
             </>
           ) : (
             (reason ?? 'The code you entered is incorrect.')
           )}
         </Text>
-        {success && uid ? <Text style={styles.uid}>Firebase UID: {uid}</Text> : null}
+        {success && uid ? <Text style={styles.uid}>User ID: {uid}</Text> : null}
       </View>
 
       <View style={styles.actions}>

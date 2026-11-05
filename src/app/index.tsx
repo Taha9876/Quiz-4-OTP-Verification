@@ -4,19 +4,16 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
-import { FirebaseSmsSender } from '@/components/firebase-sms-sender';
 import { Screen } from '@/components/screen';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { sendCodeDirect } from '@/lib/firebase-auth';
-import { FIREBASE_NOT_CONFIGURED, isFirebaseConfigured } from '@/lib/firebase-config';
+import { sendOtp } from '@/lib/otp-client';
 import { toE164 } from '@/lib/phone';
 
 export default function PhoneScreen() {
   const [countryCode, setCountryCode] = useState('+92');
   const [number, setNumber] = useState('');
-  const [sendingTo, setSendingTo] = useState<string | null>(null);
-  const [requesting, setRequesting] = useState(false);
+  const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const phone = toE164(countryCode, number);
@@ -26,45 +23,25 @@ export default function PhoneScreen() {
       setError('Enter a valid mobile number, e.g. 300 1234567.');
       return;
     }
-    if (!isFirebaseConfigured) {
-      setError(FIREBASE_NOT_CONFIGURED);
-      return;
-    }
     setError(null);
-    setRequesting(true);
-    const result = await sendCodeDirect(phone);
-    setRequesting(false);
-    if (result.status === 'sent') {
-      router.push({ pathname: '/verify', params: { phone, verificationId: result.verificationId } });
-    } else if (result.status === 'error') {
-      setError(result.message);
-    } else {
-      setSendingTo(phone); // Firebase wants reCAPTCHA: open the security-check sheet, which sends the SMS
+    setSending(true);
+    try {
+      const { token } = await sendOtp(phone);
+      router.push({ pathname: '/verify', params: { phone, token } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send the code.');
+    } finally {
+      setSending(false);
     }
-  }
-
-  function handleSent(verificationId: string) {
-    const to = sendingTo ?? '';
-    setSendingTo(null);
-    router.push({ pathname: '/verify', params: { phone: to, verificationId } });
   }
 
   return (
     <Screen footer={<PoweredBy />}>
-      <FirebaseSmsSender
-        phone={sendingTo}
-        onSent={handleSent}
-        onError={(message) => {
-          setSendingTo(null);
-          setError(message);
-        }}
-        onCancel={() => setSendingTo(null)}
-      />
       <ScreenHeader
         icon="phone-portrait-outline"
         step="STEP 1 OF 2"
         title="Verify your phone"
-        subtitle="Enter your mobile number and we'll text you a 6-digit code to confirm it's yours."
+        subtitle="Enter your mobile number. The server generates a random 6-digit OTP for it."
       />
 
       <Text style={styles.label}>Mobile number</Text>
@@ -103,11 +80,11 @@ export default function PhoneScreen() {
           <Text style={styles.errorText}>{error}</Text>
         </View>
       ) : (
-        <Text style={styles.hint}>{phone ? `Code will be sent to ${phone}` : 'Standard SMS rates may apply.'}</Text>
+        <Text style={styles.hint}>{phone ? `OTP will be generated for ${phone}` : 'The OTP will appear in the server console.'}</Text>
       )}
 
       <View style={styles.action}>
-        <Button title="Send OTP" onPress={handleSend} loading={requesting || sendingTo !== null} disabled={!number.trim()} />
+        <Button title="Send OTP" onPress={handleSend} loading={sending} disabled={!number.trim()} />
       </View>
     </Screen>
   );
@@ -117,7 +94,7 @@ function PoweredBy() {
   return (
     <View style={styles.powered}>
       <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textMuted} />
-      <Text style={styles.poweredText}>Phone verification by Firebase Authentication</Text>
+      <Text style={styles.poweredText}>OTP is delivered to the server console (laptop terminal)</Text>
     </View>
   );
 }
