@@ -4,39 +4,51 @@ import { useState } from 'react';
 import { StyleSheet, Text, TextInput, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { FirebaseSmsSender } from '@/components/firebase-sms-sender';
 import { Screen } from '@/components/screen';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors, Radius, Spacing } from '@/constants/theme';
-import { sendOtp } from '@/lib/otp-client';
+import { FIREBASE_NOT_CONFIGURED, isFirebaseConfigured } from '@/lib/firebase-config';
 import { toE164 } from '@/lib/phone';
 
 export default function PhoneScreen() {
   const [countryCode, setCountryCode] = useState('+92');
   const [number, setNumber] = useState('');
-  const [sending, setSending] = useState(false);
+  const [sendingTo, setSendingTo] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const phone = toE164(countryCode, number);
 
-  async function handleSend() {
+  function handleSend() {
     if (!phone) {
       setError('Enter a valid mobile number, e.g. 300 1234567.');
       return;
     }
-    setError(null);
-    setSending(true);
-    try {
-      await sendOtp(phone);
-      router.push({ pathname: '/verify', params: { phone } });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not send the code.');
-    } finally {
-      setSending(false);
+    if (!isFirebaseConfigured) {
+      setError(FIREBASE_NOT_CONFIGURED);
+      return;
     }
+    setError(null);
+    setSendingTo(phone); // opens the Firebase security-check sheet, which sends the SMS
+  }
+
+  function handleSent(verificationId: string) {
+    const to = sendingTo ?? '';
+    setSendingTo(null);
+    router.push({ pathname: '/verify', params: { phone: to, verificationId } });
   }
 
   return (
     <Screen footer={<PoweredBy />}>
+      <FirebaseSmsSender
+        phone={sendingTo}
+        onSent={handleSent}
+        onError={(message) => {
+          setSendingTo(null);
+          setError(message);
+        }}
+        onCancel={() => setSendingTo(null)}
+      />
       <ScreenHeader
         icon="phone-portrait-outline"
         step="STEP 1 OF 2"
@@ -84,7 +96,7 @@ export default function PhoneScreen() {
       )}
 
       <View style={styles.action}>
-        <Button title="Send OTP" onPress={handleSend} loading={sending} disabled={!number.trim()} />
+        <Button title="Send OTP" onPress={handleSend} loading={sendingTo !== null} disabled={!number.trim()} />
       </View>
     </Screen>
   );
@@ -94,7 +106,7 @@ function PoweredBy() {
   return (
     <View style={styles.powered}>
       <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textMuted} />
-      <Text style={styles.poweredText}>SMS verification by Twilio Verify</Text>
+      <Text style={styles.poweredText}>Phone verification by Firebase Authentication</Text>
     </View>
   );
 }

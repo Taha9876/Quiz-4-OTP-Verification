@@ -4,15 +4,18 @@ import { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 import { Button } from '@/components/button';
+import { FirebaseSmsSender } from '@/components/firebase-sms-sender';
 import { OtpInput } from '@/components/otp-input';
 import { Screen } from '@/components/screen';
 import { ScreenHeader } from '@/components/screen-header';
 import { Colors, OTP_LENGTH, RESEND_COOLDOWN_SECONDS, Spacing } from '@/constants/theme';
-import { OtpRequestError, sendOtp, verifyOtp } from '@/lib/otp-client';
+import { confirmCode, FirebaseAuthError } from '@/lib/firebase-auth';
 import { maskPhone } from '@/lib/phone';
 
 export default function VerifyScreen() {
-  const { phone = '' } = useLocalSearchParams<{ phone: string }>();
+  const params = useLocalSearchParams<{ phone: string; verificationId: string }>();
+  const phone = params.phone ?? '';
+  const [verificationId, setVerificationId] = useState(params.verificationId ?? '');
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
@@ -32,16 +35,17 @@ export default function VerifyScreen() {
     setNotice(null);
     setVerifying(true);
     try {
-      const result = await verifyOtp(phone, code);
+      const result = await confirmCode(verificationId, code);
       setCode('');
       if (result.verified) {
+        console.log(`[firebase] Verified ${result.phoneNumber} -> registered as uid ${result.uid}`);
         // Replace so "back" from the success screen doesn't return to a used code.
-        router.replace({ pathname: '/result', params: { status: 'success', phone } });
+        router.replace({ pathname: '/result', params: { status: 'success', phone: result.phoneNumber || phone, uid: result.uid } });
       } else {
-        router.push({ pathname: '/result', params: { status: 'failure', phone, reason: result.message } });
+        router.push({ pathname: '/result', params: { status: 'failure', phone, reason: result.reason } });
       }
     } catch (e) {
-      if (e instanceof OtpRequestError && e.code === 'network') {
+      if (e instanceof FirebaseAuthError && e.code === 'network') {
         setError(e.message);
       } else {
         setCode('');
@@ -53,24 +57,31 @@ export default function VerifyScreen() {
     }
   }
 
-  async function handleResend() {
+  function handleResend() {
     setError(null);
     setNotice(null);
-    setResending(true);
-    try {
-      await sendOtp(phone);
-      setCode('');
-      setSecondsLeft(RESEND_COOLDOWN_SECONDS);
-      setNotice('A new code is on its way.');
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not resend the code.');
-    } finally {
-      setResending(false);
-    }
+    setResending(true); // opens the Firebase security-check sheet
+  }
+
+  function handleResent(newVerificationId: string) {
+    setResending(false);
+    setVerificationId(newVerificationId);
+    setCode('');
+    setSecondsLeft(RESEND_COOLDOWN_SECONDS);
+    setNotice('A new code is on its way.');
   }
 
   return (
     <Screen>
+      <FirebaseSmsSender
+        phone={resending ? phone : null}
+        onSent={handleResent}
+        onError={(message) => {
+          setResending(false);
+          setError(message);
+        }}
+        onCancel={() => setResending(false)}
+      />
       <Pressable onPress={() => router.back()} hitSlop={12} style={styles.back} accessibilityRole="button">
         <Ionicons name="chevron-back" size={20} color={Colors.primary} />
         <Text style={styles.backText}>Change number</Text>

@@ -1,84 +1,76 @@
-# Quiz 4 – OTP Phone Number Verification (React Native / Expo)
+# Quiz 4 – OTP Phone Number Verification (React Native / Expo + Firebase)
 
-An Expo app that verifies a phone number with a one-time password sent **by SMS** through **Twilio Verify**.
+An Expo app that verifies a phone number with a one-time password sent **by SMS** through **Firebase Authentication (Phone Auth)**. After a successful check, the number is **registered** as a user in Firebase Console → Authentication → Users.
 
 1. Enter a phone number
-2. Request an OTP, which arrives by SMS
+2. Request an OTP, which Firebase sends by SMS
 3. Enter the 6-digit code
-4. See a **success** or **failure** screen
+4. See a **success** (number verified and registered) or **failure** screen
 
 ## Screenshots & recording
 
-| Enter number | SMS received | Enter code | Success | Failure |
-| --- | --- | --- | --- | --- |
-| ![](screenshots/1-enter-number.png) | ![](screenshots/2-sms-received.png) | ![](screenshots/3-enter-code.png) | ![](screenshots/4-success.png) | ![](screenshots/5-failure.png) |
+| Enter number | SMS received | Enter code | Success | Failure | Firebase console |
+| --- | --- | --- | --- | --- | --- |
+| ![](screenshots/1-enter-number.png) | ![](screenshots/2-sms-received.png) | ![](screenshots/3-enter-code.png) | ![](screenshots/4-success.png) | ![](screenshots/5-failure.png) | ![](screenshots/6-firebase-users.png) |
 
 Screen recording: [`screenshots/demo.mp4`](screenshots/demo.mp4)
 
 ## How it works
 
 ```
- Expo app (phone)                 Expo dev server (laptop)                 Twilio Verify
- ───────────────                  ────────────────────────                 ─────────────
- Send OTP  ── POST /api/otp/send ──►  send+api.ts   ── POST /Verifications ──►  texts a code
- Verify    ── POST /api/otp/verify ─► verify+api.ts ── POST /VerificationCheck ─► approved / pending
+ Phone screen ──► Security-check sheet (WebView)                    Firebase Auth
+                  Firebase JS SDK + invisible reCAPTCHA
+                  signInWithPhoneNumber(phone) ───────────────────►  sends SMS with OTP
+                  ◄──────────────────────────── verificationId ─────
+ Code screen  ──► accounts:signInWithPhoneNumber {verificationId, code} ──► INVALID_CODE → failure screen
+                                                                     └► user created → success screen
+                                                                        (listed in Console → Users)
 ```
 
-* The app never holds the Twilio Auth Token. It calls its own **Expo Router API routes** (`src/app/api/otp/*+api.ts`). These run on the server and read the credentials from `.env`.
-* Twilio Verify generates the code, sends the SMS, handles expiry (10 min) and limits retries, so no codes are stored in this project.
-* A wrong code returns `pending` → **Verification failed** screen with *Try again*. The right code returns `approved` → **Phone number verified** screen.
-* Twilio errors (unverified trial number, blocked country, too many attempts, expired code) are turned into readable messages.
+* **Sending the SMS:** Firebase only sends phone-auth SMS after a reCAPTCHA check, and reCAPTCHA needs a browser. `src/components/firebase-sms-sender.tsx` opens a sheet with a `react-native-webview`. The sheet loads the official Firebase JS SDK, using the project's `authDomain` as its base URL, and calls `signInWithPhoneNumber` with an invisible reCAPTCHA. It then passes the `verificationId` back to the app. This works inside **Expo Go**, so no custom native build is needed.
+* **Checking the code:** `src/lib/firebase-auth.ts` sends the `verificationId` and the typed code to Firebase's Identity Toolkit endpoint `accounts:signInWithPhoneNumber`, the same call the Firebase SDK makes. The right code signs the user in and creates them in Firebase. A wrong code returns `INVALID_CODE`, and the app shows **Verification failed** with *Try again*.
+* The SMS comes from Firebase's own sender, not a personal phone.
 
 ## Tech stack
 
-Expo SDK 58 · React Native 0.88 · Expo Router (screens + API routes) · TypeScript · Twilio Verify REST API
+Expo SDK 58 · React Native 0.88 · Expo Router · TypeScript · Firebase Authentication (Phone) · react-native-webview
 
 ## Project structure
 
 ```
 src/
   app/
-    _layout.tsx            Stack navigator
-    index.tsx              Step 1 – phone number entry
-    verify.tsx             Step 2 – OTP entry, resend timer
-    result.tsx             Success / failure screen
-    api/otp/send+api.ts    POST: start a Twilio verification (send SMS)
-    api/otp/verify+api.ts  POST: check the code
-    api/health+api.ts      GET: is the backend configured?
-  components/              Button, OtpInput, Screen, ScreenHeader
-  lib/phone.ts             E.164 formatting and masking
-  lib/otp-client.ts        App-side fetch helpers
-  server/twilio-verify.ts  Server-only Twilio client + error mapping
+    _layout.tsx                    Stack navigator
+    index.tsx                      Step 1 – phone number entry
+    verify.tsx                     Step 2 – OTP entry, resend timer
+    result.tsx                     Success / failure screen (shows Firebase UID)
+  components/
+    firebase-sms-sender.tsx        WebView sheet: reCAPTCHA + signInWithPhoneNumber
+    otp-input.tsx                  6-box code input with SMS autofill
+    button.tsx, screen.tsx, screen-header.tsx
+  lib/
+    firebase-config.ts             Firebase web config from .env
+    firebase-auth.ts               Confirms the code with Firebase
+    phone.ts                       E.164 formatting and masking
 ```
 
 ## Run it
 
-### 1. Twilio setup (free trial, no card needed)
+### 1. Firebase setup
 
-1. Sign up at <https://www.twilio.com/try-twilio> and verify your own mobile number.
-2. In the Console home, copy the **Account SID** and **Auth Token**.
-3. Go to **Verify → Services → Create new**, give it a name, and copy the **Service SID** (starts with `VA`).
-4. Trial accounts can only text **verified numbers**. The number you signed up with already is one. Add others under *Phone Numbers → Manage → Verified Caller IDs*.
-5. If SMS to your country is blocked, enable it under *Verify → Settings → Geo permissions*.
+1. In <https://console.firebase.google.com>, create a project.
+2. Upgrade it to the **Blaze** plan. Firebase only sends phone-auth SMS on Blaze.
+3. Go to **Authentication → Sign-in method → Phone** and enable it.
+4. Go to **Project settings → Your apps → Web app (`</>`)**, register an app and copy its `firebaseConfig`.
 
 ### 2. Configure and start
 
 ```bash
 npm install
-cp .env.example .env      # then paste the three TWILIO_* values
-npx expo start            # add --tunnel if the phone is on a different network
+cp .env.example .env      # paste the firebaseConfig values
+npx expo start
 ```
 
-Open **Expo Go** on an Android/iOS phone and scan the QR code. The API routes are served by the same dev server, so nothing else needs to run.
+Open the app in **Expo Go** on an Android/iOS phone by scanning the QR code. With USB debugging you can also run `adb reverse tcp:8081 tcp:8081`, then start with `npx expo start --localhost` and open `exp://127.0.0.1:8081`.
 
-Check the backend: open `http://localhost:8081/api/health`. It should show `"configured": true`.
-
-## API
-
-| Method | Path | Body | Success response |
-| --- | --- | --- | --- |
-| POST | `/api/otp/send` | `{ "phone": "+923001234567" }` | `{ ok: true, status: "pending", to: "+92300 ••• 4567" }` |
-| POST | `/api/otp/verify` | `{ "phone": "+923001234567", "code": "123456" }` | `{ ok: true, verified: true \| false, status, message }` |
-| GET | `/api/health` | – | `{ ok: true, provider: "twilio-verify", configured: true }` |
-
-Errors come back as `{ ok: false, code, message }` with a matching HTTP status.
+After a successful verification, open **Firebase Console → Authentication → Users**. The phone number is listed there as a registered user.

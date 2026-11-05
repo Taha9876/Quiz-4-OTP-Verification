@@ -8,7 +8,7 @@ import { Screen } from '@/components/screen';
 import { Colors, Spacing } from '@/constants/theme';
 
 export default function ResultScreen() {
-  const { status, phone = '', reason } = useLocalSearchParams<{ status: string; phone?: string; reason?: string }>();
+  const { status, phone = '', reason, uid } = useLocalSearchParams<{ status: string; phone?: string; reason?: string; uid?: string }>();
   const success = status === 'success';
 
   const [scale] = useState(() => new Animated.Value(0.6));
@@ -33,12 +33,13 @@ export default function ResultScreen() {
         <Text style={styles.message}>
           {success ? (
             <>
-              <Text style={styles.phone}>{phone}</Text> has been verified successfully. You&apos;re all set!
+              <Text style={styles.phone}>{phone}</Text> has been verified and registered in Firebase Authentication.
             </>
           ) : (
             (reason ?? 'The code you entered is incorrect.')
           )}
         </Text>
+        {success && uid ? <Text style={styles.uid}>Firebase UID: {uid}</Text> : null}
       </View>
 
       <View style={styles.actions}>
@@ -72,5 +73,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '800', color: Colors.text, textAlign: 'center', marginBottom: Spacing.sm },
   message: { fontSize: 16, lineHeight: 23, color: Colors.textMuted, textAlign: 'center', maxWidth: 340 },
   phone: { color: Colors.text, fontWeight: '700' },
+  uid: { marginTop: Spacing.md, fontSize: 12, color: Colors.textMuted, fontFamily: 'monospace' },
   actions: { marginTop: Spacing.xxl, gap: Spacing.md },
 });
