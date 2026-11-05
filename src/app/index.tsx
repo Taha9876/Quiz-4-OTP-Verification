@@ -1,98 +1,123 @@
-import * as Device from 'expo-device';
-import { Platform, StyleSheet } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import Ionicons from '@expo/vector-icons/Ionicons';
+import { router } from 'expo-router';
+import { useState } from 'react';
+import { StyleSheet, Text, TextInput, View } from 'react-native';
 
-import { AnimatedIcon } from '@/components/animated-icon';
-import { HintRow } from '@/components/hint-row';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
+import { Button } from '@/components/button';
+import { Screen } from '@/components/screen';
+import { ScreenHeader } from '@/components/screen-header';
+import { Colors, Radius, Spacing } from '@/constants/theme';
+import { sendOtp } from '@/lib/otp-client';
+import { toE164 } from '@/lib/phone';
 
-function getDevMenuHint() {
-  if (Platform.OS === 'web') {
-    return <ThemedText type="small">use browser devtools</ThemedText>;
+export default function PhoneScreen() {
+  const [countryCode, setCountryCode] = useState('+92');
+  const [number, setNumber] = useState('');
+  const [sending, setSending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const phone = toE164(countryCode, number);
+
+  async function handleSend() {
+    if (!phone) {
+      setError('Enter a valid mobile number, e.g. 300 1234567.');
+      return;
+    }
+    setError(null);
+    setSending(true);
+    try {
+      await sendOtp(phone);
+      router.push({ pathname: '/verify', params: { phone } });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not send the code.');
+    } finally {
+      setSending(false);
+    }
   }
-  if (Device.isDevice) {
-    return (
-      <ThemedText type="small">
-        shake device or press <ThemedText type="code">m</ThemedText> in terminal
-      </ThemedText>
-    );
-  }
-  const shortcut = Platform.OS === 'android' ? 'cmd+m (or ctrl+m)' : 'cmd+d';
+
   return (
-    <ThemedText type="small">
-      press <ThemedText type="code">{shortcut}</ThemedText>
-    </ThemedText>
+    <Screen footer={<PoweredBy />}>
+      <ScreenHeader
+        icon="phone-portrait-outline"
+        step="STEP 1 OF 2"
+        title="Verify your phone"
+        subtitle="Enter your mobile number and we'll text you a 6-digit code to confirm it's yours."
+      />
+
+      <Text style={styles.label}>Mobile number</Text>
+      <View style={[styles.inputRow, error && styles.inputRowError]}>
+        <TextInput
+          value={countryCode}
+          onChangeText={(t) => setCountryCode(`+${t.replace(/\D/g, '').slice(0, 4)}`)}
+          keyboardType="phone-pad"
+          maxLength={5}
+          accessibilityLabel="Country code"
+          style={styles.countryCode}
+        />
+        <View style={styles.divider} />
+        <TextInput
+          value={number}
+          onChangeText={(t) => {
+            setNumber(t);
+            if (error) setError(null);
+          }}
+          placeholder="300 1234567"
+          placeholderTextColor="#94A3B8"
+          keyboardType="phone-pad"
+          textContentType="telephoneNumber"
+          autoComplete="tel"
+          autoFocus
+          returnKeyType="send"
+          onSubmitEditing={handleSend}
+          accessibilityLabel="Phone number"
+          style={styles.number}
+        />
+      </View>
+
+      {error ? (
+        <View style={styles.errorRow}>
+          <Ionicons name="alert-circle" size={16} color={Colors.danger} />
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      ) : (
+        <Text style={styles.hint}>{phone ? `Code will be sent to ${phone}` : 'Standard SMS rates may apply.'}</Text>
+      )}
+
+      <View style={styles.action}>
+        <Button title="Send OTP" onPress={handleSend} loading={sending} disabled={!number.trim()} />
+      </View>
+    </Screen>
   );
 }
 
-export default function HomeScreen() {
+function PoweredBy() {
   return (
-    <ThemedView style={styles.container}>
-      <SafeAreaView style={styles.safeArea}>
-        <ThemedView style={styles.heroSection}>
-          <AnimatedIcon />
-          <ThemedText type="title" style={styles.title}>
-            Welcome to&nbsp;Expo
-          </ThemedText>
-        </ThemedView>
-
-        <ThemedText type="code" style={styles.code}>
-          get started
-        </ThemedText>
-
-        <ThemedView type="backgroundElement" style={styles.stepContainer}>
-          <HintRow
-            title="Try editing"
-            hint={<ThemedText type="code">src/app/index.tsx</ThemedText>}
-          />
-          <HintRow title="Dev tools" hint={getDevMenuHint()} />
-          <HintRow
-            title="Fresh start"
-            hint={<ThemedText type="code">npm run reset-project</ThemedText>}
-          />
-        </ThemedView>
-
-        {Platform.OS === 'web' && <WebBadge />}
-      </SafeAreaView>
-    </ThemedView>
+    <View style={styles.powered}>
+      <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textMuted} />
+      <Text style={styles.poweredText}>SMS verification by Twilio Verify</Text>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
+  label: { fontSize: 14, fontWeight: '600', color: Colors.text, marginBottom: Spacing.sm },
+  inputRow: {
     flexDirection: 'row',
-  },
-  safeArea: {
-    flex: 1,
-    paddingHorizontal: Spacing.four,
     alignItems: 'center',
-    gap: Spacing.three,
-    paddingBottom: BottomTabInset + Spacing.three,
-    maxWidth: MaxContentWidth,
+    height: 58,
+    borderRadius: Radius.md,
+    borderWidth: 1.5,
+    borderColor: Colors.border,
+    backgroundColor: Colors.card,
   },
-  heroSection: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    flex: 1,
-    paddingHorizontal: Spacing.four,
-    gap: Spacing.four,
-  },
-  title: {
-    textAlign: 'center',
-  },
-  code: {
-    textTransform: 'uppercase',
-  },
-  stepContainer: {
-    gap: Spacing.three,
-    alignSelf: 'stretch',
-    paddingHorizontal: Spacing.three,
-    paddingVertical: Spacing.four,
-    borderRadius: Spacing.four,
-  },
+  inputRowError: { borderColor: Colors.danger },
+  countryCode: { width: 76, height: '100%', textAlign: 'center', fontSize: 17, fontWeight: '600', color: Colors.text },
+  divider: { width: 1, height: 28, backgroundColor: Colors.border },
+  number: { flex: 1, height: '100%', paddingHorizontal: Spacing.md, fontSize: 17, color: Colors.text, letterSpacing: 0.5 },
+  hint: { marginTop: Spacing.sm, fontSize: 13, color: Colors.textMuted },
+  errorRow: { flexDirection: 'row', gap: 6, marginTop: Spacing.sm, alignItems: 'flex-start' },
+  errorText: { flex: 1, fontSize: 13, lineHeight: 18, color: Colors.danger },
+  action: { marginTop: Spacing.xl },
+  powered: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  poweredText: { fontSize: 12, color: Colors.textMuted },
 });

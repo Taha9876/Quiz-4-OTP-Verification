@@ -1,56 +1,84 @@
-# Welcome to your Expo app 👋
+# Quiz 4 – OTP Phone Number Verification (React Native / Expo)
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+An Expo app that verifies a phone number with a one-time password sent **by SMS** through **Twilio Verify**.
 
-## Get started
+1. Enter a phone number
+2. Request an OTP, which arrives by SMS
+3. Enter the 6-digit code
+4. See a **success** or **failure** screen
 
-1. Install dependencies
+## Screenshots & recording
 
-   ```bash
-   npm install
-   ```
+| Enter number | SMS received | Enter code | Success | Failure |
+| --- | --- | --- | --- | --- |
+| ![](screenshots/1-enter-number.png) | ![](screenshots/2-sms-received.png) | ![](screenshots/3-enter-code.png) | ![](screenshots/4-success.png) | ![](screenshots/5-failure.png) |
 
-2. Start the app
+Screen recording: [`screenshots/demo.mp4`](screenshots/demo.mp4)
 
-   ```bash
-   npx expo start
-   ```
+## How it works
 
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **src/app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```
+ Expo app (phone)                 Expo dev server (laptop)                 Twilio Verify
+ ───────────────                  ────────────────────────                 ─────────────
+ Send OTP  ── POST /api/otp/send ──►  send+api.ts   ── POST /Verifications ──►  texts a code
+ Verify    ── POST /api/otp/verify ─► verify+api.ts ── POST /VerificationCheck ─► approved / pending
 ```
 
-This command will move the starter code to the **example** directory and create a blank **src/app** directory where you can start developing.
+* The app never holds the Twilio Auth Token. It calls its own **Expo Router API routes** (`src/app/api/otp/*+api.ts`). These run on the server and read the credentials from `.env`.
+* Twilio Verify generates the code, sends the SMS, handles expiry (10 min) and limits retries, so no codes are stored in this project.
+* A wrong code returns `pending` → **Verification failed** screen with *Try again*. The right code returns `approved` → **Phone number verified** screen.
+* Twilio errors (unverified trial number, blocked country, too many attempts, expired code) are turned into readable messages.
 
-### Other setup steps
+## Tech stack
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Expo SDK 58 · React Native 0.88 · Expo Router (screens + API routes) · TypeScript · Twilio Verify REST API
 
-## Learn more
+## Project structure
 
-To learn more about developing your project with Expo, look at the following resources:
+```
+src/
+  app/
+    _layout.tsx            Stack navigator
+    index.tsx              Step 1 – phone number entry
+    verify.tsx             Step 2 – OTP entry, resend timer
+    result.tsx             Success / failure screen
+    api/otp/send+api.ts    POST: start a Twilio verification (send SMS)
+    api/otp/verify+api.ts  POST: check the code
+    api/health+api.ts      GET: is the backend configured?
+  components/              Button, OtpInput, Screen, ScreenHeader
+  lib/phone.ts             E.164 formatting and masking
+  lib/otp-client.ts        App-side fetch helpers
+  server/twilio-verify.ts  Server-only Twilio client + error mapping
+```
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+## Run it
 
-## Join the community
+### 1. Twilio setup (free trial, no card needed)
 
-Join our community of developers creating universal apps.
+1. Sign up at <https://www.twilio.com/try-twilio> and verify your own mobile number.
+2. In the Console home, copy the **Account SID** and **Auth Token**.
+3. Go to **Verify → Services → Create new**, give it a name, and copy the **Service SID** (starts with `VA`).
+4. Trial accounts can only text **verified numbers**. The number you signed up with already is one. Add others under *Phone Numbers → Manage → Verified Caller IDs*.
+5. If SMS to your country is blocked, enable it under *Verify → Settings → Geo permissions*.
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+### 2. Configure and start
+
+```bash
+npm install
+cp .env.example .env      # then paste the three TWILIO_* values
+npx expo start            # add --tunnel if the phone is on a different network
+```
+
+Open **Expo Go** on an Android/iOS phone and scan the QR code. The API routes are served by the same dev server, so nothing else needs to run.
+
+Check the backend: open `http://localhost:8081/api/health`. It should show `"configured": true`.
+
+## API
+
+| Method | Path | Body | Success response |
+| --- | --- | --- | --- |
+| POST | `/api/otp/send` | `{ "phone": "+923001234567" }` | `{ ok: true, status: "pending", to: "+92300 ••• 4567" }` |
+| POST | `/api/otp/verify` | `{ "phone": "+923001234567", "code": "123456" }` | `{ ok: true, verified: true \| false, status, message }` |
+| GET | `/api/health` | – | `{ ok: true, provider: "twilio-verify", configured: true }` |
+
+Errors come back as `{ ok: false, code, message }` with a matching HTTP status.
