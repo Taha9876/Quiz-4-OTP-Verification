@@ -12,9 +12,7 @@ import { OtpRequestError, sendOtp, verifyOtp } from '@/lib/otp-client';
 import { maskPhone } from '@/lib/phone';
 
 export default function VerifyScreen() {
-  const params = useLocalSearchParams<{ phone: string; token?: string }>();
-  const phone = params.phone ?? '';
-  const [token, setToken] = useState(params.token ?? '');
+  const { phone = '' } = useLocalSearchParams<{ phone: string }>();
   const [code, setCode] = useState('');
   const [verifying, setVerifying] = useState(false);
   const [resending, setResending] = useState(false);
@@ -34,7 +32,7 @@ export default function VerifyScreen() {
     setNotice(null);
     setVerifying(true);
     try {
-      const result = await verifyOtp(phone, code, token);
+      const result = await verifyOtp(phone, code);
       setCode('');
       if (result.verified) {
         // Replace so "back" from the success screen doesn't return to a used code.
@@ -60,8 +58,7 @@ export default function VerifyScreen() {
     setNotice(null);
     setResending(true);
     try {
-      const sent = await sendOtp(phone);
-      setToken(sent.token ?? '');
+      await sendOtp(phone);
       setCode('');
       setSecondsLeft(RESEND_COOLDOWN_SECONDS);
       setNotice('A new code is on its way.');

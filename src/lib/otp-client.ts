@@ -35,9 +35,9 @@ async function post<T>(path: string, payload: Record<string, string>): Promise<T
 }
 
 export function sendOtp(phone: string) {
-  return post<{ ok: true; provider: string; to: string; token: string | null }>('/api/otp/send', { phone });
+  return post<{ ok: true; status: string; to: string }>('/api/otp/send', { phone });
 }
 
-export function verifyOtp(phone: string, code: string, token: string) {
-  return post<{ ok: true; verified: boolean; message: string }>('/api/otp/verify', { phone, code, token });
+export function verifyOtp(phone: string, code: string) {
+  return post<{ ok: true; verified: boolean; status: string; message: string }>('/api/otp/verify', { phone, code });
 }

@@ -1,6 +1,5 @@
 import { isE164, maskPhone } from '@/lib/phone';
-import { errorResponse } from '@/server/otp-error';
-import { getProvider, startOtp } from '@/server/otp-service';
+import { errorResponse, startVerification } from '@/server/twilio-verify';
 
 /** POST /api/otp/send  { phone: "+923001234567" } */
 export async function POST(request: Request) {
@@ -15,8 +14,8 @@ export async function POST(request: Request) {
   }
 
   try {
-    const { token } = await startOtp(phone);
-    return Response.json({ ok: true, provider: getProvider(), to: maskPhone(phone), token });
+    const verification = await startVerification(phone);
+    return Response.json({ ok: true, status: verification.status, to: maskPhone(phone) });
   } catch (error) {
     return errorResponse(error);
   }
