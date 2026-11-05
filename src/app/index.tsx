@@ -26,8 +26,8 @@ export default function PhoneScreen() {
     setError(null);
     setSending(true);
     try {
-      await sendOtp(phone);
-      router.push({ pathname: '/verify', params: { phone } });
+      const { token } = await sendOtp(phone);
+      router.push({ pathname: '/verify', params: { phone, token: token ?? '' } });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Could not send the code.');
     } finally {
@@ -94,7 +94,7 @@ function PoweredBy() {
   return (
     <View style={styles.powered}>
       <Ionicons name="shield-checkmark-outline" size={14} color={Colors.textMuted} />
-      <Text style={styles.poweredText}>SMS verification by Twilio Verify</Text>
+      <Text style={styles.poweredText}>One-time password sent by SMS</Text>
     </View>
   );
 }
